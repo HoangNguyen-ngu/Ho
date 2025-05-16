@@ -18,17 +18,24 @@ import javafx.scene.text.Font;
 import javafx.stage.Stage;
 import org.json.JSONArray;
 import org.json.JSONObject;
+
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Main GUI class for the Library Management System using JavaFX.
+ * Provides a user interface to manage documents, users, and borrowing records.
+ */
 public class LibraryAppGUI extends Application {
-    private Library library = new Library();
+    private Library library = Library.getInstance(); // Singleton instance
+    private UserManager userManager = UserManager.getInstance(); // Singleton instance
     private User loggedInUser;
     private TableView<Document> table = new TableView<>();
-    private UserManager userManager = new UserManager();
     private List<BookRating> bookRatings = new ArrayList<>();
     private VBox buttonBox;
     private boolean isButtonBoxVisible = true;
@@ -36,23 +43,32 @@ public class LibraryAppGUI extends Application {
     private static final String DOCUMENTS_FILE = "documents.csv";
     private static final String BORROWED_FILE = "borrowed.csv";
     private static final String RATINGS_FILE = "ratings.csv";
+    private static final String BORROW_LOG_FILE = "borrow_log.csv"; // File to track borrow dates
 
+    /**
+     * Represents a record of a borrowed document with quantity and borrow date.
+     */
     private static class BorrowedRecord {
         String userId;
         String docId;
         int quantity;
+        LocalDate borrowDate; // Added to track borrow date
 
-        BorrowedRecord(String userId, String docId, int quantity) {
+        BorrowedRecord(String userId, String docId, int quantity, LocalDate borrowDate) {
             this.userId = userId;
             this.docId = docId;
             this.quantity = quantity;
+            this.borrowDate = borrowDate;
         }
 
         String toCSV() {
-            return userId + "," + docId + "," + quantity;
+            return userId + "," + docId + "," + quantity + "," + borrowDate.format(DateTimeFormatter.ISO_LOCAL_DATE);
         }
     }
 
+    /**
+     * Represents a book rating given by a user.
+     */
     private static class BookRating {
         String bookTitle;
         String userId;
@@ -76,9 +92,14 @@ public class LibraryAppGUI extends Application {
         }
     }
 
+    /**
+     * Initializes the GUI with the logged-in user.
+     * @param loggedInUser The user who logged in.
+     */
     public void init(User loggedInUser) {
         this.loggedInUser = loggedInUser;
-        // Không tải lại dữ liệu ở đây, chỉ sử dụng dữ liệu từ Library đã khởi tạo
+        loadRatingsFromFile();
+        checkOverdueBooks(); // Check for overdue books on startup
     }
 
     @Override
@@ -89,6 +110,7 @@ public class LibraryAppGUI extends Application {
         root.setPadding(new Insets(20));
         root.setStyle("-fx-background-color: linear-gradient(to bottom right, #e0f7fa, #ffffff);");
 
+        // Logo and Title
         ImageView logo = new ImageView(new Image("file:logo.png", 80, 80, true, true));
         logo.setPreserveRatio(true);
 
@@ -97,9 +119,7 @@ public class LibraryAppGUI extends Application {
         title.setTextFill(Color.web("#006064"));
         title.setStyle("-fx-font-weight: bold;");
 
-        VBox topBox = new VBox(10, logo, title);
-        topBox.setAlignment(Pos.CENTER);
-
+        // Search Bar
         TextField searchField = new TextField();
         searchField.setPromptText("Search for books on Google Books...");
         searchField.setPrefWidth(300);
@@ -117,10 +137,12 @@ public class LibraryAppGUI extends Application {
 
         HBox searchBox = new HBox(10, searchField, searchButton);
         searchBox.setAlignment(Pos.CENTER_RIGHT);
-        topBox.getChildren().add(searchBox);
 
+        VBox topBox = new VBox(10, logo, title, searchBox);
+        topBox.setAlignment(Pos.CENTER);
         root.setTop(topBox);
 
+        // Sidebar with Buttons
         Button toggleButton = new Button("☰");
         toggleButton.setStyle("-fx-background-color: transparent; -fx-text-fill: #006064; -fx-font-size: 24px;");
         toggleButton.setOnAction(e -> {
@@ -131,17 +153,18 @@ public class LibraryAppGUI extends Application {
         });
 
         String[] labels = {
-                "[0] ❌ Exit",
-                "[1] ➕ Add Document",
-                "[2] 🗑 Remove Document",
-                "[3] ✏ Update Document",
-                "[4] 🔍 Find Document",
-                "[5] 📄 Display by Subject",
-                "[6] 👤 Add User",
-                "[7] 📥 Borrow Document",
-                "[8] 📤 Return Document",
-                "[9] 🧾 Display User Info",
-                "[11] 📊 View Book Ratings"
+                "❌ Exit",
+                "➕ Add Document",
+                "🗑 Remove Document",
+                "✏ Update Document",
+                "🔍 Find Document",
+                "📄 Display by Subject",
+                "👤 Add User",
+                "📥 Borrow Document",
+                "📤 Return Document",
+                "🧾 Display User Info",
+                "📊 View Statistics", // Button for statistics
+                "📊 View Book Ratings"
         };
 
         buttonBox = new VBox(10);
@@ -167,6 +190,7 @@ public class LibraryAppGUI extends Application {
         leftBox.setAlignment(Pos.TOP_LEFT);
         root.setLeft(leftBox);
 
+        // Table for Documents
         TableColumn<Document, String> idCol = new TableColumn<>("ID");
         idCol.setCellValueFactory(new PropertyValueFactory<>("id"));
 
@@ -195,12 +219,23 @@ public class LibraryAppGUI extends Application {
         centerBox.setAlignment(Pos.CENTER);
         root.setCenter(centerBox);
 
+        // Make the layout responsive
+        root.prefWidthProperty().bind(primaryStage.widthProperty());
+        root.prefHeightProperty().bind(primaryStage.heightProperty());
+        centerBox.prefWidthProperty().bind(root.widthProperty().subtract(leftBox.widthProperty()).subtract(40));
+        table.prefWidthProperty().bind(centerBox.widthProperty());
+        searchField.prefWidthProperty().bind(topBox.widthProperty().multiply(0.5));
+
         Scene scene = new Scene(root, 900, 600);
         scene.getStylesheets().add("style.css");
         primaryStage.setScene(scene);
         primaryStage.show();
     }
 
+    /**
+     * Handles button actions based on the index.
+     * @param action The index of the action to perform.
+     */
     private void handleAction(int action) {
         switch (action) {
             case 0 -> {
@@ -217,23 +252,32 @@ public class LibraryAppGUI extends Application {
             case 7 -> borrowDocument();
             case 8 -> returnDocument();
             case 9 -> displayUserInfo();
-            case 10 -> displayBookRatings();
+            case 10 -> displayStatistics(); // Updated to show days remaining
+            case 11 -> displayBookRatings();
         }
     }
 
+    /**
+     * Refreshes the table with the current documents, avoiding duplicates.
+     */
     private void refreshTable() {
         Map<String, Document> uniqueDocuments = new HashMap<>();
         for (Document doc : library.getDocuments()) {
-            if (uniqueDocuments.containsKey(doc.getId())) {
-                Document existingDoc = uniqueDocuments.get(doc.getId());
-                existingDoc.setQuantity(existingDoc.getQuantity() + doc.getQuantity());
-            } else {
-                uniqueDocuments.put(doc.getId(), new Book(doc.getId(), doc.getTitle(), doc.getAuthor(), doc.getQuantity(), doc.getSubject()));
-            }
+            uniqueDocuments.compute(doc.getId(), (id, existingDoc) -> {
+                if (existingDoc == null) {
+                    return new Book(doc.getId(), doc.getTitle(), doc.getAuthor(), doc.getQuantity(), doc.getSubject());
+                } else {
+                    existingDoc.setQuantity(existingDoc.getQuantity() + doc.getQuantity());
+                    return existingDoc;
+                }
+            });
         }
         table.setItems(FXCollections.observableArrayList(uniqueDocuments.values()));
     }
 
+    /**
+     * Adds a new document to the library.
+     */
     private void addDocument() {
         Dialog<Document> dialog = new Dialog<>();
         dialog.setTitle("Add Document");
@@ -286,12 +330,14 @@ public class LibraryAppGUI extends Application {
         Optional<Document> result = dialog.showAndWait();
         result.ifPresent(doc -> {
             library.addDocument(doc);
-            saveDocumentsToFile();
             showAlert("Success", "Document added successfully.");
             refreshTable();
         });
     }
 
+    /**
+     * Removes a specified quantity of a document from the library.
+     */
     private void removeDocument() {
         if (library.getDocuments().isEmpty()) {
             showAlert("Error", "Document list is empty, cannot remove.");
@@ -317,7 +363,6 @@ public class LibraryAppGUI extends Application {
                         if (doc.getQuantity() == 0) {
                             library.removeDocumentById(doc.getId());
                         }
-                        saveDocumentsToFile();
                         showAlert("Success", "Removed " + quantityToRemove + " copies of " + doc.getTitle());
                         refreshTable();
                     }
@@ -330,6 +375,9 @@ public class LibraryAppGUI extends Application {
         }
     }
 
+    /**
+     * Updates the quantity of a document in the library.
+     */
     private void updateDocument() {
         String id = prompt("Enter Document ID:");
         Document doc = library.findById(id);
@@ -342,7 +390,6 @@ public class LibraryAppGUI extends Application {
             try {
                 int quantity = Integer.parseInt(qtyStr);
                 doc.setQuantity(quantity);
-                saveDocumentsToFile();
                 showAlert("Success", "Quantity updated successfully for " + doc.getTitle());
                 refreshTable();
             } catch (NumberFormatException e) {
@@ -351,6 +398,9 @@ public class LibraryAppGUI extends Application {
         }
     }
 
+    /**
+     * Finds a document by its ID or title.
+     */
     private void findDocument() {
         String searchKey = prompt("Enter Document ID or Title to find:");
         if (searchKey != null) {
@@ -369,6 +419,9 @@ public class LibraryAppGUI extends Application {
         }
     }
 
+    /**
+     * Displays documents filtered by subject.
+     */
     private void displayDocuments() {
         Set<String> subjects = new TreeSet<>();
         for (Document doc : library.getDocuments()) {
@@ -407,17 +460,22 @@ public class LibraryAppGUI extends Application {
         result.ifPresent(selectedSubject -> {
             Map<String, Document> uniqueDocuments = new HashMap<>();
             for (Document doc : library.getDocuments().filtered(doc -> doc.getSubject().equals(selectedSubject))) {
-                if (uniqueDocuments.containsKey(doc.getId())) {
-                    Document existingDoc = uniqueDocuments.get(doc.getId());
-                    existingDoc.setQuantity(existingDoc.getQuantity() + doc.getQuantity());
-                } else {
-                    uniqueDocuments.put(doc.getId(), new Book(doc.getId(), doc.getTitle(), doc.getAuthor(), doc.getQuantity(), doc.getSubject()));
-                }
+                uniqueDocuments.compute(doc.getId(), (id, existingDoc) -> {
+                    if (existingDoc == null) {
+                        return new Book(doc.getId(), doc.getTitle(), doc.getAuthor(), doc.getQuantity(), doc.getSubject());
+                    } else {
+                        existingDoc.setQuantity(existingDoc.getQuantity() + doc.getQuantity());
+                        return existingDoc;
+                    }
+                });
             }
             table.setItems(FXCollections.observableArrayList(uniqueDocuments.values()));
         });
     }
 
+    /**
+     * Adds a new user to the library.
+     */
     private void addUser() {
         String username = prompt("Enter User ID:");
         String name = prompt("Enter User Name:");
@@ -429,6 +487,9 @@ public class LibraryAppGUI extends Application {
         }
     }
 
+    /**
+     * Borrows a document for a user and logs the borrow date.
+     */
     private void borrowDocument() {
         String userId = prompt("Enter User ID to borrow:");
         User user = library.findUserById(userId);
@@ -450,8 +511,7 @@ public class LibraryAppGUI extends Application {
                     showAlert("Error", "Not enough copies available. Only " + doc.getQuantity() + " left.");
                 } else {
                     user.borrowDocument(doc, quantityToBorrow);
-                    saveDocumentsToFile();
-                    saveBorrowedRecordsToFile();
+                    logBorrowRecord(user.getUsername(), doc.getId(), quantityToBorrow, LocalDate.now());
                     showAlert("Success", user.getUsername() + " borrowed " + quantityToBorrow + " copies of " + doc.getTitle());
                     refreshTable();
                 }
@@ -461,6 +521,9 @@ public class LibraryAppGUI extends Application {
         }
     }
 
+    /**
+     * Returns a document for a user and prompts for a rating.
+     */
     private void returnDocument() {
         String userId = prompt("Enter User ID to return:");
         User user = library.findUserById(userId);
@@ -484,8 +547,7 @@ public class LibraryAppGUI extends Application {
                     return;
                 }
                 user.returnDocument(doc, quantityToReturn);
-                saveDocumentsToFile();
-                saveBorrowedRecordsToFile();
+                updateBorrowLog(user.getUsername(), doc.getId(), quantityToReturn);
 
                 Dialog<BookRating> ratingDialog = new Dialog<>();
                 ratingDialog.setTitle("Rate the Book");
@@ -536,6 +598,9 @@ public class LibraryAppGUI extends Application {
         }
     }
 
+    /**
+     * Displays information about all users and their borrowed documents.
+     */
     private void displayUserInfo() {
         Map<String, User> users = library.getAllUsers();
         if (users.isEmpty()) {
@@ -559,6 +624,71 @@ public class LibraryAppGUI extends Application {
         showAlert("User Info", sb.toString());
     }
 
+    /**
+     * Displays borrowing statistics for all users, including days remaining.
+     * Calculates the number of days left until the 7-day borrowing limit is exceeded.
+     */
+    private void displayStatistics() {
+        Map<String, User> users = library.getAllUsers();
+        if (users.isEmpty()) {
+            showAlert("Error", "No users available.");
+            return;
+        }
+        List<BorrowedRecord> borrowRecords = new ArrayList<>();
+        File file = new File(BORROW_LOG_FILE);
+        if (file.exists()) {
+            try (BufferedReader reader = new BufferedReader(new FileReader(BORROW_LOG_FILE))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String[] parts = line.split(",");
+                    if (parts.length >= 4) {
+                        String userId = parts[0];
+                        String docId = parts[1];
+                        int quantity = Integer.parseInt(parts[2]);
+                        LocalDate borrowDate = LocalDate.parse(parts[3], DateTimeFormatter.ISO_LOCAL_DATE);
+                        borrowRecords.add(new BorrowedRecord(userId, docId, quantity, borrowDate));
+                    }
+                }
+            } catch (IOException | NumberFormatException e) {
+                showAlert("Error", "Failed to load borrow logs: " + e.getMessage());
+                return;
+            }
+        }
+
+        StringBuilder sb = new StringBuilder("Borrowing Statistics:\n\n");
+        LocalDate today = LocalDate.now();
+        for (User user : users.values()) {
+            int totalBorrowed = user.getBorrowedDocuments().values().stream().mapToInt(Integer::intValue).sum();
+            sb.append("User: ").append(user.getUsername())
+                    .append(" (").append(user.getName()).append(")\n")
+                    .append("Total Books Borrowed: ").append(totalBorrowed).append("\n")
+                    .append("Details:\n");
+
+            for (Map.Entry<String, Integer> entry : user.getBorrowedDocuments().entrySet()) {
+                String docId = entry.getKey();
+                int quantity = entry.getValue();
+                Document doc = library.findById(docId);
+                if (doc != null) {
+                    Optional<BorrowedRecord> record = borrowRecords.stream()
+                            .filter(r -> r.userId.equals(user.getUsername()) && r.docId.equals(docId))
+                            .findFirst();
+                    record.ifPresent(r -> {
+                        long daysBorrowed = java.time.temporal.ChronoUnit.DAYS.between(r.borrowDate, today);
+                        long daysRemaining = Math.max(0, 7 - daysBorrowed); // Calculate remaining days
+                        String status = daysRemaining > 0 ? daysRemaining + " days remaining" : "Overdue by " + Math.abs(daysRemaining - 7) + " days";
+                        sb.append("- ").append(doc.getTitle()).append(" (").append(quantity).append(" copies) - ").append(status).append("\n");
+                    });
+                }
+            }
+            sb.append("\n");
+        }
+        showAlert("Statistics", sb.toString());
+    }
+
+    /**
+     * Searches for books using the Google Books API.
+     * @param query The search query.
+     */
     private void searchGoogleBooks(String query) {
         Task<String> searchTask = new Task<>() {
             @Override
@@ -624,6 +754,9 @@ public class LibraryAppGUI extends Application {
         new Thread(searchTask).start();
     }
 
+    /**
+     * Displays all book ratings.
+     */
     private void displayBookRatings() {
         if (bookRatings.isEmpty()) {
             showAlert("No Ratings", "No book ratings available.");
@@ -637,6 +770,121 @@ public class LibraryAppGUI extends Application {
         showAlert("Book Ratings", sb.toString());
     }
 
+    /**
+     * Logs a borrow record with the current date.
+     * @param userId The ID of the user borrowing.
+     * @param docId The ID of the document.
+     * @param quantity The quantity borrowed.
+     * @param borrowDate The date of borrowing.
+     */
+    private void logBorrowRecord(String userId, String docId, int quantity, LocalDate borrowDate) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(BORROW_LOG_FILE, true))) {
+            BorrowedRecord record = new BorrowedRecord(userId, docId, quantity, borrowDate);
+            writer.write(record.toCSV());
+            writer.newLine();
+        } catch (IOException e) {
+            showAlert("Error", "Failed to log borrow record: " + e.getMessage());
+        }
+        library.saveBorrowedRecordsToFile();
+    }
+
+    /**
+     * Updates the borrow log when a document is returned.
+     * @param userId The ID of the user returning.
+     * @param docId The ID of the document.
+     * @param quantityReturned The quantity returned.
+     */
+    private void updateBorrowLog(String userId, String docId, int quantityReturned) {
+        List<BorrowedRecord> records = new ArrayList<>();
+        File file = new File(BORROW_LOG_FILE);
+        if (file.exists()) {
+            try (BufferedReader reader = new BufferedReader(new FileReader(BORROW_LOG_FILE))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String[] parts = line.split(",");
+                    if (parts.length >= 4) {
+                        String recordUserId = parts[0];
+                        String recordDocId = parts[1];
+                        int quantity = Integer.parseInt(parts[2]);
+                        LocalDate borrowDate = LocalDate.parse(parts[3], DateTimeFormatter.ISO_LOCAL_DATE);
+                        if (recordUserId.equals(userId) && recordDocId.equals(docId)) {
+                            quantity -= quantityReturned;
+                            if (quantity > 0) {
+                                records.add(new BorrowedRecord(recordUserId, recordDocId, quantity, borrowDate));
+                            }
+                        } else {
+                            records.add(new BorrowedRecord(recordUserId, recordDocId, quantity, borrowDate));
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                showAlert("Error", "Failed to update borrow log: " + e.getMessage());
+            }
+        }
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(BORROW_LOG_FILE))) {
+            for (BorrowedRecord record : records) {
+                writer.write(record.toCSV());
+                writer.newLine();
+            }
+        } catch (IOException e) {
+            showAlert("Error", "Failed to save updated borrow log: " + e.getMessage());
+        }
+        library.saveBorrowedRecordsToFile();
+    }
+
+    /**
+     * Checks for overdue books (borrowed more than 7 days ago) and alerts the user.
+     */
+    private void checkOverdueBooks() {
+        List<BorrowedRecord> records = new ArrayList<>();
+        File file = new File(BORROW_LOG_FILE);
+        if (file.exists()) {
+            try (BufferedReader reader = new BufferedReader(new FileReader(BORROW_LOG_FILE))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String[] parts = line.split(",");
+                    if (parts.length >= 4) {
+                        String userId = parts[0];
+                        String docId = parts[1];
+                        int quantity = Integer.parseInt(parts[2]);
+                        LocalDate borrowDate = LocalDate.parse(parts[3], DateTimeFormatter.ISO_LOCAL_DATE);
+                        records.add(new BorrowedRecord(userId, docId, quantity, borrowDate));
+                    }
+                }
+            } catch (IOException e) {
+                showAlert("Error", "Failed to check overdue books: " + e.getMessage());
+            }
+        }
+
+        LocalDate today = LocalDate.now();
+        StringBuilder overdueMessage = new StringBuilder("Overdue Books:\n\n");
+        boolean hasOverdue = false;
+
+        for (BorrowedRecord record : records) {
+            long daysBorrowed = java.time.temporal.ChronoUnit.DAYS.between(record.borrowDate, today);
+            if (daysBorrowed > 7) {
+                User user = library.findUserById(record.userId);
+                Document doc = library.findById(record.docId);
+                if (user != null && doc != null) {
+                    hasOverdue = true;
+                    overdueMessage.append("User: ").append(user.getName())
+                            .append(" (ID: ").append(user.getUsername()).append(")\n")
+                            .append("Book: ").append(doc.getTitle())
+                            .append(" (").append(record.quantity).append(" copies)\n")
+                            .append("Borrowed on: ").append(record.borrowDate)
+                            .append(" (").append(daysBorrowed).append(" days ago)\n\n");
+                }
+            }
+        }
+
+        if (hasOverdue) {
+            showAlert("Overdue Alert", overdueMessage.toString());
+        }
+    }
+
+    /**
+     * Loads documents from documents.csv.
+     */
     private void loadDocumentsFromFile() {
         try (BufferedReader reader = new BufferedReader(new FileReader(DOCUMENTS_FILE))) {
             String line;
@@ -652,12 +900,15 @@ public class LibraryAppGUI extends Application {
                 }
             }
         } catch (FileNotFoundException e) {
-            // File chưa tồn tại, sẽ được tạo khi lưu lần đầu
+            // File not found, will be created on first save
         } catch (IOException | NumberFormatException e) {
             showAlert("Error", "Failed to load documents: " + e.getMessage());
         }
     }
 
+    /**
+     * Saves documents to documents.csv.
+     */
     private void saveDocumentsToFile() {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(DOCUMENTS_FILE))) {
             for (Document doc : library.getDocuments()) {
@@ -669,12 +920,15 @@ public class LibraryAppGUI extends Application {
         }
     }
 
+    /**
+     * Loads borrowed records from borrowed.csv.
+     */
     private void loadBorrowedRecordsFromFile() {
         try (BufferedReader reader = new BufferedReader(new FileReader(BORROWED_FILE))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 String[] parts = line.split(",");
-                if (parts.length == 3) {
+                if (parts.length >= 3) {
                     String userId = parts[0];
                     String docId = parts[1];
                     int quantity = Integer.parseInt(parts[2]);
@@ -686,12 +940,15 @@ public class LibraryAppGUI extends Application {
                 }
             }
         } catch (FileNotFoundException e) {
-            // File chưa tồn tại, sẽ được tạo khi lưu lần đầu
+            // File not found, will be created on first save
         } catch (IOException | NumberFormatException e) {
             showAlert("Error", "Failed to load borrowed records: " + e.getMessage());
         }
     }
 
+    /**
+     * Saves borrowed records to borrowed.csv.
+     */
     private void saveBorrowedRecordsToFile() {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(BORROWED_FILE))) {
             for (User user : library.getAllUsers().values()) {
@@ -708,6 +965,9 @@ public class LibraryAppGUI extends Application {
         }
     }
 
+    /**
+     * Loads ratings from ratings.csv.
+     */
     private void loadRatingsFromFile() {
         try (BufferedReader reader = new BufferedReader(new FileReader(RATINGS_FILE))) {
             String line;
@@ -722,12 +982,15 @@ public class LibraryAppGUI extends Application {
                 }
             }
         } catch (FileNotFoundException e) {
-            // File chưa tồn tại, sẽ được tạo khi lưu lần đầu
+            // File not found, will be created on first save
         } catch (IOException | NumberFormatException e) {
             showAlert("Error", "Failed to load ratings: " + e.getMessage());
         }
     }
 
+    /**
+     * Saves ratings to ratings.csv.
+     */
     private void saveRatingsToFile() {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(RATINGS_FILE))) {
             for (BookRating rating : bookRatings) {
@@ -739,6 +1002,11 @@ public class LibraryAppGUI extends Application {
         }
     }
 
+    /**
+     * Shows an alert with the specified title and message.
+     * @param title The title of the alert.
+     * @param msg The message to display.
+     */
     private void showAlert(String title, String msg) {
         Platform.runLater(() -> {
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
@@ -749,6 +1017,11 @@ public class LibraryAppGUI extends Application {
         });
     }
 
+    /**
+     * Prompts the user for input with a dialog.
+     * @param message The message to display in the dialog.
+     * @return The user's input, or null if cancelled.
+     */
     private String prompt(String message) {
         TextInputDialog dialog = new TextInputDialog();
         dialog.setHeaderText(message);
