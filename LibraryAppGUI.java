@@ -39,11 +39,20 @@ public class LibraryAppGUI extends Application {
     private List<BookRating> bookRatings = new ArrayList<>();
     private VBox buttonBox;
     private boolean isButtonBoxVisible = true;
+    private boolean isDarkMode = false; // Track current mode (false = Light Mode)
+
+    private BorderPane root; // Reference to root for updating styles
+    private CheckBox toggleModeSwitch; // Switch to toggle modes (replaces Button)
+    private TextField searchField; // Reference to search field for style updates
+    private Button searchButton; // Reference to search button for style updates
+    private Button refreshButton; // Reference to refresh button for style updates
+    private Label title; // Reference to title label for style updates
 
     private static final String DOCUMENTS_FILE = "documents.csv";
     private static final String BORROWED_FILE = "borrowed.csv";
     private static final String RATINGS_FILE = "ratings.csv";
     private static final String BORROW_LOG_FILE = "borrow_log.csv"; // File to track borrow dates
+    private static final String THEME_CONFIG_FILE = "theme.config"; // File to store theme state
 
     /**
      * Represents a record of a borrowed document with quantity and borrow date.
@@ -106,26 +115,28 @@ public class LibraryAppGUI extends Application {
     public void start(Stage primaryStage) {
         primaryStage.setTitle("📚 Electronic Library System");
 
-        BorderPane root = new BorderPane();
+        // Load theme state from file
+        loadThemeState();
+
+        root = new BorderPane();
         root.setPadding(new Insets(20));
-        root.setStyle("-fx-background-color: linear-gradient(to bottom right, #e0f7fa, #ffffff);");
 
         // Logo and Title
         ImageView logo = new ImageView(new Image("file:logo.png", 80, 80, true, true));
         logo.setPreserveRatio(true);
 
-        Label title = new Label("📖 LIBRARY MANAGEMENT SYSTEM");
+        title = new Label("📖 LIBRARY MANAGEMENT SYSTEM");
         title.setFont(Font.font("Arial", 24));
-        title.setTextFill(Color.web("#006064"));
-        title.setStyle("-fx-font-weight: bold;");
+        title.getStyleClass().add("title-label");
 
         // Search Bar
-        TextField searchField = new TextField();
+        searchField = new TextField();
         searchField.setPromptText("Search for books on Google Books...");
         searchField.setPrefWidth(300);
-        searchField.setStyle("-fx-background-radius: 20; -fx-border-radius: 20; -fx-border-color: #d1d5db; -fx-border-width: 1; -fx-padding: 8 16 8 16;");
-        Button searchButton = new Button("🔍");
-        searchButton.setStyle("-fx-background-color: #3b82f6; -fx-text-fill: white; -fx-background-radius: 20; -fx-padding: 8 16 8 16;");
+        searchField.getStyleClass().add("text-field");
+
+        searchButton = new Button("🔍");
+        searchButton.getStyleClass().add("search-button");
         searchButton.setOnAction(e -> {
             String query = searchField.getText();
             if (query != null && !query.isEmpty()) {
@@ -135,7 +146,17 @@ public class LibraryAppGUI extends Application {
             }
         });
 
-        HBox searchBox = new HBox(10, searchField, searchButton);
+        // Toggle Mode Switch (replaces Button)
+        toggleModeSwitch = new CheckBox("Dark Mode");
+        toggleModeSwitch.getStyleClass().add("toggle-mode-switch");
+        toggleModeSwitch.setSelected(isDarkMode); // Set initial state based on loaded theme
+        toggleModeSwitch.setOnAction(e -> {
+            isDarkMode = toggleModeSwitch.isSelected();
+            updateTheme();
+            saveThemeState(); // Save theme state when changed
+        });
+
+        HBox searchBox = new HBox(10, searchField, searchButton, toggleModeSwitch);
         searchBox.setAlignment(Pos.CENTER_RIGHT);
 
         VBox topBox = new VBox(10, logo, title, searchBox);
@@ -163,19 +184,19 @@ public class LibraryAppGUI extends Application {
                 "📥 Borrow Document",
                 "📤 Return Document",
                 "🧾 Display User Info",
-                "📊 View Statistics", // Button for statistics
+                "📊 View Statistics",
                 "📊 View Book Ratings"
         };
 
         buttonBox = new VBox(10);
         buttonBox.setPadding(new Insets(10));
-        buttonBox.setStyle("-fx-background-color: #ffffff; -fx-background-radius: 12; -fx-border-radius: 12; -fx-border-color: #d1d5db; -fx-border-width: 1;");
+        buttonBox.getStyleClass().add("button-box");
 
         for (int i = 0; i < labels.length; i++) {
             Button b = new Button(labels[i]);
             b.setPrefWidth(200);
             b.setPrefHeight(40);
-            b.setStyle("-fx-background-color: #00acc1; -fx-text-fill: white; -fx-font-size: 14; -fx-background-radius: 10;");
+            b.getStyleClass().add("button");
             b.setEffect(new DropShadow(5, Color.GRAY));
             int index = i;
             b.setOnAction(e -> handleAction(index));
@@ -184,7 +205,7 @@ public class LibraryAppGUI extends Application {
 
         ScrollPane buttonScrollPane = new ScrollPane(buttonBox);
         buttonScrollPane.setFitToWidth(true);
-        buttonScrollPane.setStyle("-fx-background: transparent; -fx-background-color: transparent;");
+        buttonScrollPane.getStyleClass().add("scroll-pane");
 
         VBox leftBox = new VBox(10, toggleButton, buttonScrollPane);
         leftBox.setAlignment(Pos.TOP_LEFT);
@@ -209,10 +230,11 @@ public class LibraryAppGUI extends Application {
         table.getColumns().addAll(idCol, titleCol, authorCol, qtyCol, subjectCol);
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         table.setPrefHeight(400);
+        table.getStyleClass().add("table-view");
         refreshTable();
 
-        Button refreshButton = new Button("Refresh");
-        refreshButton.setStyle("-fx-background-color: #3b82f6; -fx-text-fill: white; -fx-background-radius: 10;");
+        refreshButton = new Button("Refresh");
+        refreshButton.getStyleClass().add("refresh-button");
         refreshButton.setOnAction(e -> refreshTable());
 
         VBox centerBox = new VBox(10, table, refreshButton);
@@ -226,10 +248,123 @@ public class LibraryAppGUI extends Application {
         table.prefWidthProperty().bind(centerBox.widthProperty());
         searchField.prefWidthProperty().bind(topBox.widthProperty().multiply(0.5));
 
+        // Apply theme after all UI components are initialized
+        updateTheme();
+
         Scene scene = new Scene(root, 900, 600);
         scene.getStylesheets().add("style.css");
         primaryStage.setScene(scene);
         primaryStage.show();
+
+        // Save theme state when closing the app
+        primaryStage.setOnCloseRequest(event -> {
+            saveThemeState();
+            saveBorrowedRecordsToFile();
+            saveRatingsToFile();
+        });
+    }
+
+    /**
+     * Loads the theme state from the config file.
+     */
+    private void loadThemeState() {
+        File file = new File(THEME_CONFIG_FILE);
+        if (file.exists()) {
+            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                String line = reader.readLine();
+                if (line != null) {
+                    isDarkMode = Boolean.parseBoolean(line.trim());
+                }
+            } catch (IOException e) {
+                showAlert("Error", "Failed to load theme state: " + e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Saves the theme state to the config file.
+     */
+    private void saveThemeState() {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(THEME_CONFIG_FILE))) {
+            writer.write(String.valueOf(isDarkMode));
+        } catch (IOException e) {
+            showAlert("Error", "Failed to save theme state: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Updates the entire theme based on the current mode (Dark or Light).
+     */
+    private void updateTheme() {
+        if (isDarkMode) {
+            // Dark Mode
+            root.getStyleClass().remove("light-mode");
+            root.getStyleClass().add("dark-mode");
+            updateTitleStyle();
+            updateSearchFieldStyle();
+            updateButtonBoxStyle();
+            updateTableStyle();
+        } else {
+            // Light Mode
+            root.getStyleClass().remove("dark-mode");
+            root.getStyleClass().add("light-mode");
+            updateTitleStyle();
+            updateSearchFieldStyle();
+            updateButtonBoxStyle();
+            updateTableStyle();
+        }
+    }
+
+    /**
+     * Updates the title label style based on the current mode.
+     */
+    private void updateTitleStyle() {
+        if (isDarkMode) {
+            title.getStyleClass().remove("light-mode");
+            title.getStyleClass().add("dark-mode");
+        } else {
+            title.getStyleClass().remove("dark-mode");
+            title.getStyleClass().add("light-mode");
+        }
+    }
+
+    /**
+     * Updates the search field style based on the current mode.
+     */
+    private void updateSearchFieldStyle() {
+        if (isDarkMode) {
+            searchField.getStyleClass().remove("light-mode");
+            searchField.getStyleClass().add("dark-mode");
+        } else {
+            searchField.getStyleClass().remove("dark-mode");
+            searchField.getStyleClass().add("light-mode");
+        }
+    }
+
+    /**
+     * Updates the button box (sidebar) style based on the current mode.
+     */
+    private void updateButtonBoxStyle() {
+        if (isDarkMode) {
+            buttonBox.getStyleClass().remove("light-mode");
+            buttonBox.getStyleClass().add("dark-mode");
+        } else {
+            buttonBox.getStyleClass().remove("dark-mode");
+            buttonBox.getStyleClass().add("light-mode");
+        }
+    }
+
+    /**
+     * Updates the table style based on the current mode.
+     */
+    private void updateTableStyle() {
+        if (isDarkMode) {
+            table.getStyleClass().remove("light-mode");
+            table.getStyleClass().add("dark-mode");
+        } else {
+            table.getStyleClass().remove("dark-mode");
+            table.getStyleClass().add("light-mode");
+        }
     }
 
     /**
@@ -241,6 +376,7 @@ public class LibraryAppGUI extends Application {
             case 0 -> {
                 saveBorrowedRecordsToFile();
                 saveRatingsToFile();
+                saveThemeState(); // Save theme state on exit
                 System.exit(0);
             }
             case 1 -> addDocument();
@@ -252,7 +388,7 @@ public class LibraryAppGUI extends Application {
             case 7 -> borrowDocument();
             case 8 -> returnDocument();
             case 9 -> displayUserInfo();
-            case 10 -> displayStatistics(); // Updated to show days remaining
+            case 10 -> displayStatistics();
             case 11 -> displayBookRatings();
         }
     }
@@ -702,6 +838,7 @@ public class LibraryAppGUI extends Application {
 
     /**
      * Searches for books using the Google Books API.
+     * This method is kept unchanged from the original code to ensure it works as before.
      * @param query The search query.
      */
     private void searchGoogleBooks(String query) {
