@@ -337,6 +337,7 @@ public class LibraryAppGUI extends Application {
 
     /**
      * Removes a specified quantity of a document from the library.
+     * Prevents removal if the document is currently borrowed.
      */
     private void removeDocument() {
         if (library.getDocuments().isEmpty()) {
@@ -356,6 +357,20 @@ public class LibraryAppGUI extends Application {
                             .orElse(null);
                 }
                 if (doc != null) {
+                    // Check if the document is currently borrowed
+                    boolean isBorrowed = false;
+                    for (User user : library.getAllUsers().values()) {
+                        if (user.getBorrowedQuantity(doc.getId()) > 0) {
+                            isBorrowed = true;
+                            break;
+                        }
+                    }
+
+                    if (isBorrowed) {
+                        showAlert("Error", "Cannot remove " + doc.getTitle() + " because it is currently borrowed.");
+                        return;
+                    }
+
                     if (quantityToRemove > doc.getQuantity()) {
                         showAlert("Error", "Quantity to remove exceeds available copies (" + doc.getQuantity() + ").");
                     } else {
@@ -490,7 +505,7 @@ public class LibraryAppGUI extends Application {
     /**
      * Borrows a document for a user and logs the borrow date.
      */
-    private void borrowDocument() {
+    public void borrowDocument() {
         String userId = prompt("Enter User ID to borrow:");
         User user = library.findUserById(userId);
         if (user == null) {
@@ -524,7 +539,7 @@ public class LibraryAppGUI extends Application {
     /**
      * Returns a document for a user and prompts for a rating.
      */
-    private void returnDocument() {
+    public void returnDocument() {
         String userId = prompt("Enter User ID to return:");
         User user = library.findUserById(userId);
         if (user == null) {
@@ -601,7 +616,7 @@ public class LibraryAppGUI extends Application {
     /**
      * Displays information about all users and their borrowed documents.
      */
-    private void displayUserInfo() {
+    public void displayUserInfo() {
         Map<String, User> users = library.getAllUsers();
         if (users.isEmpty()) {
             showAlert("Error", "No users available.");
@@ -628,7 +643,7 @@ public class LibraryAppGUI extends Application {
      * Displays borrowing statistics for all users, including days remaining.
      * Calculates the number of days left until the 7-day borrowing limit is exceeded.
      */
-    private void displayStatistics() {
+    public void displayStatistics() {
         Map<String, User> users = library.getAllUsers();
         if (users.isEmpty()) {
             showAlert("Error", "No users available.");
@@ -1007,7 +1022,7 @@ public class LibraryAppGUI extends Application {
      * @param title The title of the alert.
      * @param msg The message to display.
      */
-    private void showAlert(String title, String msg) {
+    public void showAlert(String title, String msg) {
         Platform.runLater(() -> {
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
             alert.setTitle(title);
@@ -1022,7 +1037,7 @@ public class LibraryAppGUI extends Application {
      * @param message The message to display in the dialog.
      * @return The user's input, or null if cancelled.
      */
-    private String prompt(String message) {
+    public String prompt(String message) {
         TextInputDialog dialog = new TextInputDialog();
         dialog.setHeaderText(message);
         Optional<String> result = dialog.showAndWait();
