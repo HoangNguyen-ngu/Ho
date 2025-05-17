@@ -3,13 +3,43 @@
     -fx-font-family: 'Arial', sans-serif;
 }
 
+.root.light-mode {
+    -fx-background-color: linear-gradient(to bottom right, #e0f7fa, #ffffff);
+}
+
+.root.dark-mode {
+    -fx-background-color: linear-gradient(to bottom right, #1f2937, #374151);
+}
+
+/* Title styles */
+.title-label.light-mode {
+    -fx-text-fill: #006064;
+    -fx-font-weight: bold;
+}
+
+.title-label.dark-mode {
+    -fx-text-fill: #e5e7eb;
+    -fx-font-weight: bold;
+}
+
 /* TableView styles */
-.table-view {
+.table-view.light-mode {
     -fx-background-color: #ffffff;
     -fx-border-color: #d1d5db;
     -fx-border-radius: 8;
     -fx-background-radius: 8;
     -fx-padding: 10;
+}
+
+.table-view.dark-mode {
+    -fx-background-color: #374151;
+    -fx-border-color: #4b5563;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 10;
+    -fx-control-inner-background: #374151;
+    -fx-table-cell-border-color: #4b5563;
+    -fx-text-fill: #e5e7eb;
 }
 
 .table-view .column-header {
@@ -18,9 +48,14 @@
     -fx-font-weight: bold;
 }
 
-.table-view .table-row-cell {
+.table-view .table-row-cell.light-mode {
     -fx-background-color: #f9fafb;
     -fx-border-color: #e5e7eb;
+}
+
+.table-view .table-row-cell.dark-mode {
+    -fx-background-color: #374151;
+    -fx-border-color: #4b5563;
 }
 
 .table-view .table-row-cell:hover {
@@ -28,6 +63,10 @@
     -fx-scale-x: 1.01;
     -fx-scale-y: 1.01;
     -fx-transition: all 0.3s ease-in-out;
+}
+
+.table-view .table-row-cell.dark-mode:hover {
+    -fx-background-color: #4b5563;
 }
 
 /* Button styles with animation */
@@ -52,19 +91,136 @@
     -fx-scale-y: 0.95;
 }
 
+/* Search Button styles */
+.search-button {
+    -fx-background-color: #3b82f6;
+    -fx-text-fill: white;
+    -fx-background-radius: 20;
+    -fx-padding: 8 16 8 16;
+}
+
+/* Refresh Button styles */
+.refresh-button {
+    -fx-background-color: #3b82f6;
+    -fx-text-fill: white;
+    -fx-background-radius: 10;
+}
+
+/* Toggle Mode Switch styles - Updated with image for circle */
+.toggle-mode-switch {
+    -fx-font-size: 14px;
+    -fx-text-fill: #000000; /* Default text color for Light Mode */
+}
+
+.toggle-mode-switch .box {
+    -fx-background-color: #d1d5db; /* Gray background when OFF */
+    -fx-background-radius: 15;
+    -fx-border-radius: 15;
+    -fx-border-color: #9ca3af;
+    -fx-border-width: 1;
+    -fx-pref-width: 60px;         /* Wider to accommodate ON/OFF text */
+    -fx-pref-height: 30px;
+    -fx-padding: 0;
+    -fx-alignment: center;
+    -fx-content-display: right;
+}
+
+.toggle-mode-switch .mark {
+    -fx-background-image: url('circle.png'); /* Sử dụng hình ảnh hình tròn */
+    -fx-background-size: 26px 26px; /* Kích thước hình ảnh */
+    -fx-background-repeat: no-repeat;
+    -fx-background-position: center;
+    -fx-pref-width: 26px;
+    -fx-pref-height: 26px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 2, 0, 0, 1);
+    -fx-transition: all 0.25s ease-in-out;
+}
+
+.toggle-mode-switch:selected .box {
+    -fx-background-color: #10b981; /* Green background when ON */
+    -fx-border-color: #059669;
+}
+
+.toggle-mode-switch:selected .mark {
+    -fx-translate-x: 30; /* Move circle to the right when ON */
+}
+
+.toggle-mode-switch .text {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-fill: #6b7280;
+    -fx-transition: all 0.25s ease-in-out;
+}
+
+.toggle-mode-switch:selected .text {
+    -fx-fill: white;
+}
+
+.toggle-mode-switch .off-text {
+    -fx-translate-x: -15;
+}
+
+.toggle-mode-switch .on-text {
+    -fx-translate-x: 15;
+    -fx-fill: white;
+    -fx-opacity: 0;
+}
+
+.toggle-mode-switch:selected .off-text {
+    -fx-opacity: 0;
+}
+
+.toggle-mode-switch:selected .on-text {
+    -fx-opacity: 1;
+}
+
+.toggle-mode-switch.dark-mode {
+    -fx-text-fill: #e5e7eb;
+}
+
 /* TextField styles */
-.text-field {
+.text-field.light-mode {
     -fx-background-radius: 20;
     -fx-border-radius: 20;
     -fx-border-color: #d1d5db;
     -fx-border-width: 1;
     -fx-padding: 8 16 8 16;
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #000000;
+    -fx-transition: all 0.3s ease-in-out;
+}
+
+.text-field.dark-mode {
+    -fx-background-radius: 20;
+    -fx-border-radius: 20;
+    -fx-border-color: #4b5563;
+    -fx-border-width: 1;
+    -fx-padding: 8 16 8 16;
+    -fx-background-color: #374151;
+    -fx-text-fill: #e5e7eb;
     -fx-transition: all 0.3s ease-in-out;
 }
 
 .text-field:focused {
     -fx-border-color: #3b82f6;
     -fx-border-width: 2;
+}
+
+/* ButtonBox (Sidebar) styles */
+.button-box.light-mode {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-border-color: #d1d5db;
+    -fx-border-width: 1;
+}
+
+.button-box.dark-mode {
+    -fx-background-color: #1f2937;
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-border-color: #4b5563;
+    -fx-border-width: 1;
 }
 
 /* ScrollPane styles */
